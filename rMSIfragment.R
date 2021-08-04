@@ -668,6 +668,34 @@ plot_figure2<-function(r,t,s="S",steps=1000,label=""){
   ggsave(paste("Fig2_Manual_Validation",".tiff",sep=label),p,path=fig_dir,width=10,height=10)
 }
 
+require(data.table)
+plot_figure2_topN<-function(r,t,s="S",steps=5,label=""){
+  #Manual validation
+  df<-data.frame(o=rep(0,steps),o_hplc=rep(0,steps),th=steps:1)
+  r<-manual_validation(r,t)$res
+  for(i in seq_along(df$th)){
+    m<-manual_validation(topN(r,s,df$th[i]),t)
+    df$o[i]<-sum(m$table$match)/nrow(m$table)
+    df$o_hplc[i]<-sum(subset(m$table,HPLC_adduct!="_")$match)/nrow(subset(m$table,HPLC_adduct!="_"))
+  }
+  dfp<-data.frame(threshold=rep(df$th,2),y=with(df,c(o,o_hplc)),var=rep(c("Matches (%)","Matches(%) (HPLC validated)"),each=steps))
+  pa<-ggplot(dfp,aes(threshold,y,col=var))+geom_line(size=2)+geom_point(size=10)+xlab("Top N for each mz")+ylab("Matches to Garate et al. 2020 (%)")+theme_bw()+theme(legend.justification = c(1, 0), legend.position = c(1, 0),legend.background=element_rect(size=0.2,colour=1),panel.border = element_rect(colour = "black", fill=NA), panel.grid.major = element_blank(),
+                                                            panel.grid.minor = element_blank(), plot.title = element_text(hjust = 0),text=element_text(size=20)) +
+    ggtitle("A")+ylim(0,0.75)
+  
+  m<-manual_validation(r,t)
+  dfp<-data.frame(score=m$res[,s],type=as.factor(match(m$res$match_HPLC_adduct,c("","_"),nomatch=3)))
+  pb<-ggplot(dfp,aes(type,score,col=type))+geom_violin()+geom_point()+
+    stat_summary(fun = "median",
+                 geom = "crossbar", 
+                 width = 0.5)+
+    xlab("")+ylab("Ranking Score (S)")+theme_bw()+theme(legend.justification = c(1, 1), legend.position = c(1, 1),legend.background=element_rect(size=0.2,colour=1),panel.border = element_rect(colour = "black", fill=NA), panel.grid.major = element_blank(),
+                                                        panel.grid.minor = element_blank(), plot.title = element_text(hjust = 0),text=element_text(size=20)) +
+    ggtitle("B")
+  
+  p=pa
+  ggsave(paste("Fig2_Manual_Validation_TopN",".tiff",sep=label),p,path=fig_dir,width=10,height=10)
+}
 
 plot_figure3<-function(pks,res,mz,topN=NA,score="lipid_occurences*(1+correlation)",label=""){
   res<-res[order(with(res,eval(parse(text=score))),decreasing=T),]
@@ -699,6 +727,33 @@ plot_figure3<-function(pks,res,mz,topN=NA,score="lipid_occurences*(1+correlation
   ggsave(paste("Fig3_Example_Annotations",".tiff",sep=label),p,path=fig_dir,width=10,height=20)
 }
 
+load_metaspace<-results
+update_table_formulas<-function(t,db)
+{
+  t$formula<-db_t$formula[match(with(t,paste(lipid," ",c,":",delta,sep="")),db$abbreviation)]
+  return(t)
+}
+metaspace_validation<-function(res,metaspace_res_path,t){
+  res_meta<-read.csv(metaspace_res_path)
+  t<-update_table_formulas(t,db_t)
+  res<-manual_validation(res,t)$res
+  t<-manual_validation(res,t)$table
+  res_meta$table_mz<-sapply(res_meta$mz,function(x)with(t,mz[which.min(abs(mz-x))]))
+  a<-with(t,paste(formula,mz))
+  b<-with(res_meta,paste(formula,table_mz))
+  c<-with(res,paste(formula,table_mz))
+  
+  res$match_f_t<-c%in%a
+  res$match_f_m<-c%in%b
+  
+  res_meta$match_f_t<-b%in%a
+  res_meta$match_f_e<-b%in%c
+  
+  t$match_f_e<-a%in%c
+  t$match_f_m<-a%in%b
+  
+  return(list(res=res,res_meta=res_meta,table=table))
+}
 one_pks<-function(pks,i){
   j<-cbind(1+c(0,cumsum(pks$numPixels)[-length(pks$numPixels)]),cumsum(pks$numPixels))
   return(pks[j[i,1]:j[i,2],])
@@ -781,6 +836,9 @@ plot_figure1(downsample(res2),metrics,label="_NEG_D2_D")
 res<-annotate(pks,db_t,20,"neg")
 res5ppm<-annotate(pks,db_t,5,"neg")
 plot_figure3(pks,res5ppm,744.558,3,label="_5ppm_top3")
+
+plot_figure2(res5ppm,load_gt(),"adduct_score",label="_adduct_score")
+plot_figure2_topN(res,load_gt())
 #Downsample T
 plot_roc(res1[c(sample(which(res$db=="T"),sum(res$db=="D")),which(res$db=="D")),],c("lipid_occurences","correlation","lipid_occurences*correlation","lipid_occurences*(correlation+1)","parental_percentage","fragment_percentage","km_correlation","km_correlation_old"))
 plot_roc(res2[c(sample(which(res$db=="T"),sum(res$db=="D")),which(res$db=="D")),],c("lipid_occurences","correlation","lipid_occurences*correlation","lipid_occurences*(correlation+1)","parental_percentage","fragment_percentage","km_correlation","km_correlation_old"))
@@ -861,11 +919,17 @@ plot_manual_percentage_2 <- function(res,scores,steps=100)
   }
   return(o)
 }
+
+topN<-function(d,s="S",n=3)
+{
+  return(do.call("rbind",lapply(unique(d[["mz_i"]]),function(i)head(subset(d[order(d[[s]],decreasing = T),],mz_i==i),n))))
+}
 #Comparison against selected METASPACE datasets
 
 #####################
 ## SHINY DASHBOARD ##
 #####################
+#tagList
 library(shiny)
 library(shinydashboard)
 library(DT)
@@ -899,29 +963,17 @@ ui <- dashboardPage(
               downloadButton("downloadData", "Download .csv")
       ),
       
-      # Second tab content
+      # Explorer Content
       tabItem(tabName = "explorer",
-              fluidRow(
-                box(plotOutput("plot1", height = 250)),
-                
-                box(
-                  title = "Controls",
-                  sliderInput("slider", "Number of observations:", 1, 100, 50)
-                )
-              )
+              fluidRow(column(2,selectInput("mz","Choose mz",is)),column(2,selectInput("n","Page",1:5)),column(3,radioButtons("nID","Choose network",choices=1:5,inline=T))),
+              fluidRow(div(style = 'overflow-y: scroll',plotOutput("networks"))),
+                fluidRow(plotOutput("plots"))
       )
     )
   )
 )
 
 server <- function(input, output) {
-  set.seed(122)
-  histdata <- rnorm(500)
-  
-  output$plot1 <- renderPlot({
-    data <- histdata[seq_len(input$slider)]
-    hist(data)
-  })
   
   output$res <- renderDT({datatable(simply(res),filter = "top")%>% 
       formatRound(columns = c(1,2,8), digits = 2)})
@@ -948,8 +1000,53 @@ server <- function(input, output) {
   output$meanSpectra <-renderPlot({
     ggplot_mean_spectra(one_pks(pks,4),input$i1,input$i2,input$i3)
   })
+  
+  k<-reactive({plot_networks(one_pks(pks,4),res5ppm,pks$mass[as.numeric(input$mz)])})
+  
+  output$networks <- renderPlot({
+    display_networks(k(),as.numeric(input$n),5)
+  })
+  
+  output$plots <- renderPlot({
+    plot_ions(one_pks(pks,4),res5ppm,pks$mass[as.numeric(input$mz)],as.numeric(input$nID)+(as.numeric(input$n)-1)*5)
+  })
 }
-
+plot_networks<-function(pks,res,mz,topN=NA,score="lipid_occurences*(1+correlation)"){
+  res<-res[order(with(res,eval(parse(text=score))),decreasing=T),]
+  i<-which.min(abs(mz-pks$mass))
+  x<-subset(res,mz_i==i)
+  if(!is.na(topN)&nrow(x)>0){
+    x<-x[1:min(nrow(x),topN),]
+  }
+  k<-list()
+  for(i in 1:nrow(x)){
+    y<-subset(res,lipid_id==x$lipid_id[i])
+    z<-matrix(0,nrow(y)+1,nrow(y)+1)
+    n=with(rbind(x[i,],y),paste(round(experimental_mz,2),"\n[",adduct," ",fragmentation,"]",sep=""))
+    n[1]<- paste(x$abbreviation[i],x$formula[i],n[1],paste("LO:",x$lipid_occurences[i],"C:",round(x$correlation[i],2)),sep="\n")
+    z[1,]=1
+    net = network(z, directed = T)
+    k[[i]]<-ggnet2(net,mode="kamadakawai",label=n,shape=15,label.size=3.5,size=20,color=1+c(0,as.numeric(y$fragmentation=="")))+
+      scale_color_brewer(palette="Set3",labels = c("Annotation for current mz","Fragment","Parental ion"))+theme(aspect.ratio = 1)
+  }
+  return(k)
+}
+display_networks<-function(k,i,n=5){
+  p<-grid.arrange(grobs=k[1:length(k)%in%(((i-1)*5+1):(i*n))],nrow=1)
+  return(p)
+}
+plot_ions<-function(pks,res,mz,j,topN=NA,score="lipid_occurences*(1+correlation)"){
+  
+  res<-res[order(with(res,eval(parse(text=score))),decreasing=T),]
+  i<-which.min(abs(mz-pks$mass))
+  x<-subset(res,mz_i==i)
+  if(!is.na(topN)&nrow(x)>0){
+    x<-x[1:min(nrow(x),topN),]
+  }
+  y<-rbind(x[j,],subset(res,lipid_id==x$lipid_id[j]))
+  p<-grid.arrange(grobs=lapply(1:nrow(y),function(i)ggplot_peak_image(pks,y$mz_i[i])))
+  return(p)
+}
 shinyApp(ui, server)
 
 ##
