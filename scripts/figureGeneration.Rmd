@@ -1,0 +1,76 @@
+---
+title: "rMSIfragment Figures"
+output: html_notebook
+---
+
+This R Markdown was used to generate the figures of the publication of rMSIfragment. It serves two purposes:
+(1) Transparency and replicability of the figures
+(2) Demonstration of an several applications of rMSIfragment (for a more detailed demonstration explore demo.Rmd)
+
+### 0. Load data
+```{r}
+
+```
+### Figure 1. Manual Validation
+```{r}
+
+```
+### Figure 2. Target Decoy Validation
+```{r}
+
+```
+### Figure 3. METASPACE Validation
+```{r}
+
+```
+### Figure 4. Example application
+```{r}
+
+```
+
+```{r}
+pks<-rMSIproc::LoadPeakMatrix("/home/gbaquer/msidata/1. In-source Fragmentation/1.5. Validation Datasets/2. Nevus articulo fragmentación/pks_neg.zip")
+metrics<-c("lipid_occurences","correlation","lipid_occurences*(correlation+1)","parental_percentage","fragment_percentage","km_correlation","km_correlation_old")
+
+res1<-target_decoy_validation(pks,db_t,db_d,mode="neg",tol=5)
+res2<-target_decoy_validation(pks,db_t,db_d,mode="neg",tol=5,d_type = F)
+
+plot_figure1(res1,metrics,label="_NEG_D1_N")
+plot_figure1(upsample(res1),metrics,label="_NEG_D1_U")
+plot_figure1(downsample(res1),metrics,label="_NEG_D1_D")
+
+plot_figure1(res2,metrics,label="_NEG_D2_N")
+plot_figure1(upsample(res2),metrics,label="_NEG_D2_U")
+plot_figure1(downsample(res2),metrics,label="_NEG_D2_D")
+
+res<-annotate(pks,db_t,20,"neg")
+res5ppm<-annotate(pks,db_t,5,"neg")
+plot_figure3(pks,res5ppm,744.558,3,label="_5ppm_top3")
+
+plot_figure2(res5ppm,load_gt(),"adduct_score",label="_adduct_score")
+plot_figure2_topN(res,load_gt())
+#Downsample T
+plot_roc(res1[c(sample(which(res$db=="T"),sum(res$db=="D")),which(res$db=="D")),],c("lipid_occurences","correlation","lipid_occurences*correlation","lipid_occurences*(correlation+1)","parental_percentage","fragment_percentage","km_correlation","km_correlation_old"))
+plot_roc(res2[c(sample(which(res$db=="T"),sum(res$db=="D")),which(res$db=="D")),],c("lipid_occurences","correlation","lipid_occurences*correlation","lipid_occurences*(correlation+1)","parental_percentage","fragment_percentage","km_correlation","km_correlation_old"))
+
+#Upsample D
+plot_roc(tmp,c("lipid_occurences","correlation","lipid_occurences*correlation","lipid_occurences*(correlation+1)*(fragment_percentage+1)","parental_percentage","fragment_percentage","km_correlation","km_correlation_old"))
+
+tmp2<-res2
+new_rows2<-nrow(tmp2)+(1:(with(res2,sum(db=="T")-sum(db=="D"))))
+tmp[new_rows2,]<-NA
+tmp2[new_rows2,"db"]<-"D"
+tmp2[new_rows2,c("lipid_occurences","correlation","km_correlation","km_correlation_old","fragment_percentage","parental_percentage")]<-0
+tmp2[new_rows2,"lipid_occurences"]<-1
+plot_roc(tmp2,c("lipid_occurences","correlation","lipid_occurences*correlation","lipid_occurences*(correlation+1)*(fragment_percentage+1)","parental_percentage","fragment_percentage","km_correlation","km_correlation_old"))
+
+#Smaller DB
+table_neg<-load_gt()
+is<-with(db_t,paste(lipid,c,delta))%in%unique(with(table_neg,paste(lipid,c,delta)))
+res<-target_decoy_validation(pks,db_t[is,],db_d[is,],mode="neg",tol=5)
+plot_roc(res,c("lipid_occurences","correlation","lipid_occurences*correlation"))
+
+
+man_val<-manual_validation(subset(res1,db=="T"),load_gt())
+```
+

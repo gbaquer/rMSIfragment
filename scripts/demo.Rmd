@@ -1,0 +1,33 @@
+---
+title: "rMSIfragment Basic Usage"
+output: html_notebook
+---
+
+This R Markdown displays the basic usage of the package rMSIfragment.
+# Step 0: Installing dependencies
+```{r}
+
+```
+
+
+# Step 1: Processing data with rMSIproc
+```{r}
+
+```
+
+# Step 2: Load data
+```{r}
+plot(cars)
+```
+
+# Step 3:Annotate
+```{r}
+
+```
+
+# sTEP 4: Browse annotations, plot and export results
+```{r}
+
+```
+
+
