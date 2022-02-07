@@ -3,9 +3,9 @@ title: "rMSIfragment Figures"
 output: html_notebook
 ---
 
-This R Markdown was used to generate the figures of the publication of rMSIfragment. It serves two purposes:
-(1) Transparency and replicability of the figures
-(2) Demonstration of an several applications of rMSIfragment (for a more detailed demonstration explore demo.Rmd)
+This R Markdown was used to generate the figures of the publication of rMSIfragment (DOI). It serves two purposes:
+(1) Transparency and reproducibility of results
+(2) Demonstration of the main applications of rMSIfragment (for a more detailed demonstration explore demo.Rmd)
 
 ### 0. Load data
 ```{r}
