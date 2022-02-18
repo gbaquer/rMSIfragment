@@ -1,9 +1,31 @@
 # utild.R : Helper functions
+subsetResults<-function(res,n){
+  a<-list()
+  for (i in unique(res$mz_i)){
+    b<-subset(res,mz_i==i)
+    a[[i]]<-b[order(b$S,decreasing=T)[1:min(n,nrow(b))],]
+  }
+  return(do.call(rbind,a))
+}
+compareToMetaspace<-function(ours,metaspace,pks){
+  a1<-ours
+  a2<-subset(a1,fragmentation=="")
+  a3<-subset(a1,fragmentation!="")
+  b<-metaspace
+  b$mz_i<-sapply(b$mz,function(x) which.min(abs(pks$mass-x)))
+  matching<-paste(b$formula,b$adduct)%in%paste(a2$formula,a2$adduct)
+  overlappedWithFragments<-paste(b$mz_i)%in%paste(a3$mz_i)
+  compoundsWithFragments<-b$formula%in%a3$formula
+  #covered<-b$formula%in%new$formula
+  #print(nrow(ours))
+  return(list(matching=sum(matching)/nrow(b),overlappedWithFragments=sum(overlappedWithFragments)/nrow(b),compoundsWithFragments=sum(compoundsWithFragments)/nrow(b),v.matching=matching,v.overlappedWithFragments=overlappedWithFragments,v.compoundsWithFragments=compoundsWithFragments))
+}
+
 parse_fragmentation<- function(s)
 {
   s<- gsub(" ", "", s, fixed = T)
   n<-unlist(strsplit(s,"|",fixed=T))
-  v<-sapply(strsplit(n,"-",fixed = T),function(x)(-1)*sum(losses[x],na.rm = T))
+  v<-sapply(strsplit(n,"-",fixed = T),function(x)(-1)*sum(env$losses[x],na.rm = T))
   names(v)<-n
   return(v)
 }
@@ -23,7 +45,7 @@ find_lipid <- function(n,s)
   pattern<-paste("(",s,")+",sep="") #pattern<-paste("[",s,"]\\w+",sep="")
   return(unlist(regmatches(n, gregexpr(pattern, n)))[1])
 }
-find_lipid_c_delta <- function(n,s=paste(lipids$name,collapse ="|")){
+find_lipid_c_delta <- function(n,s=paste(env$lipids$name,collapse ="|")){
   return(paste(find_lipid(n,s),paste(find_c_delta(n),collapse = ":")))
 }
 find_adduct <- function(n)
@@ -40,7 +62,7 @@ withintol<-function(m1,m2,tol){
 load_gt<-function(path="/home/gbaquer/msidata/1. In-source Fragmentation/1.5. Validation Datasets/2. Nevus articulo fragmentación/gt_neg.csv"){
   table<-read.csv(path,sep=";")
   #lipid
-  table$lipid<-sapply(table$assignement,function(s)find_lipid(s,paste(names(adducts)[-(1:3)],collapse="|")))
+  table$lipid<-sapply(table$assignement,function(s)find_lipid(s,paste(names(env$adducts)[-(1:3)],collapse="|")))
   #C_delta
   c_delta<-sapply(table$assignement,find_c_delta)
   table$c<-c_delta[1,]
@@ -69,14 +91,14 @@ load_lipidMAPS <- function(path="/home/gbaquer/msidata/1. In-source Fragmentatio
 
   #parse lipid, c and delta
   table[c("c","delta")]<-t(sapply(table$abbreviation,find_c_delta))
-  table$lipid<-sapply(table$abbreviation,function(x)find_lipid(x,paste(lipids$name,collapse ="|")))
+  table$lipid<-sapply(table$abbreviation,function(x)find_lipid(x,paste(env$lipids$name,collapse ="|")))
 
   return(table)
 }
 load_RefMet<-function(path="/home/gbaquer/msidata/1. In-source Fragmentation/1.5. Validation Datasets/2. Nevus articulo fragmentación/refmet.csv"){
   RefMet<-read.csv(path)
   #Trim RefMet
-  lipids_pattern<-paste(lipids$name,collapse ="|")
+  lipids_pattern<-paste(env$lipids$name,collapse ="|")
   RefMet_lipids<-subset(RefMet,grepl(lipids_pattern,refmet_name))
   RefMet_lipids[c("c","delta")]<-t(sapply(RefMet_lipids$refmet_name,find_c_delta))
   RefMet_lipids<-subset(RefMet_lipids,!is.na(c))
@@ -235,18 +257,25 @@ cor_score<-function(m){
     return(mean(m[m!=1]))
 }
 frag_possible<-function(m,l,frag){
-  return(frag %in% possible_frags(m,l))
+  return((frag %in% possible_frags(m,l))|frag=="")
 }
 possible_frags<-function(m,l){
   if(m=="neg")
-    f=fragmentation_neg
+    f=env$fragmentation_neg
   else
-    f=fragmentation_pos
+    f=env$fragmentation_pos
   s<- paste(f[l,],collapse="|")
   s<- gsub(" ", "", s, fixed = T)
   n<-unique(unlist(strsplit(s,"|",fixed=T)))
   return(n)
 }
+#' Run target decoy validation
+#'
+#'
+#' @examples
+#' target_decoy_validation()
+#'
+#' @export
 target_decoy_validation<-function(pks,db_t,db_d,mode="pos",tol=5,d_type=T){
 
   #Target

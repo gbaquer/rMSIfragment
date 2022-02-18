@@ -7,26 +7,314 @@ This R Markdown was used to generate the figures of the publication of rMSIfragm
 (1) Transparency and reproducibility of results
 (2) Demonstration of the main applications of rMSIfragment (for a more detailed demonstration explore demo.Rmd)
 
-### 0. Load data
+### Load dependencies
 ```{r}
+library(rMSI)
+library(rMSIproc)
+library(rMSIfragment)
+
+library(ggplot2)
+library(viridisLite)
+```
+
+### 0.1. Load data
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+#Load adduct and in-source fragment lipid pathways
+data(d)
+rMSIfragment:::updateEnv(d)
+
+#Load libraries
+load("E:/in-source fragmentation/DATA/target_decoy_db_new.RData")
+
+#Load experimental data
+pks_neg<-rMSIproc::LoadPeakMatrix("E:/in-source fragmentation/DATA/pks_neg.zip")
+pks_pos<-rMSIproc::LoadPeakMatrix("E:/in-source fragmentation/DATA/pks_pos.zip")
+
+#Load metrics to compare
+#metrics<-c("lipid_occurences","correlation","lipid_occurences*(correlation+1)","parental_percentage","fragment_percentage","km_correlation","km_correlation_old")
+metrics<-c("lipid_occurences","correlation","S","parental_percentage","fragment_percentage","km_correlation","km_correlation_old")
+
+
+#Load Ground Truths
+gt_neg<-rMSIfragment:::load_gt("E:/in-source fragmentation/DATA/gt_neg.csv")
+gt_pos<-rMSIfragment:::load_gt("E:/in-source fragmentation/DATA/gt_pos.csv")
 
 ```
-### Figure 1. Manual Validation
+### 0.2. Annotate in-source fragments and adducts
+```{r,,echo=FALSE,message=FALSE,warning=FALSE}
+rMSIfragment:::updateEnv(d)
+# res.neg.5ppm.td1<-rMSIfragment:::target_decoy_validation(pks_neg,db_t,db_d,mode="neg",tol=5)
+# res.neg.5ppm.td2<-rMSIfragment:::target_decoy_validation(pks_neg,db_t,db_d,mode="neg",tol=5,d_type = F)
+# res.neg.20ppm.td1<-rMSIfragment:::target_decoy_validation(pks_neg,db_t,db_d,mode="neg",tol=20)
+# res.neg.20ppm.td2<-rMSIfragment:::target_decoy_validation(pks_neg,db_t,db_d,mode="neg",tol=20,d_type = F)
+# 
+res.pos.5ppm.td1<-rMSIfragment:::target_decoy_validation(pks_pos,db_t,db_d,mode="pos",tol=5)
+res.pos.5ppm.td2<-rMSIfragment:::target_decoy_validation(pks_pos,db_t,db_d,mode="pos",tol=5,d_type = F)
+# res.pos.20ppm.td1<-rMSIfragment:::target_decoy_validation(pks_pos,db_t,db_d,mode="pos",tol=20)
+# res.pos.20ppm.td2<-rMSIfragment:::target_decoy_validation(pks_pos,db_t,db_d,mode="pos",tol=20,d_type = F)
+
+# res.neg.20ppm<-rMSIfragment::annotate(pks_neg,db_t,20,"neg")
+# res.neg.5ppm<-rMSIfragment::annotate(pks_neg,db_t,5,"neg")
+res.pos.20ppm<-rMSIfragment::annotate(pks_pos,db_t,20,"pos")
+res.pos.5ppm<-rMSIfragment::annotate(pks_pos,db_t,5,"pos")
+```
+
+### Figure 1. Manual Validation (Negative mode 5 ppm)
+```{r, fig.width=15}
+rMSIfragment:::plot_figure1(res.neg.5ppm.td1,metrics[1:3],label="_NEG_D1_N")
+rMSIfragment:::plot_figure2(pks_neg,res.neg.5ppm,gt_neg,"S",steps = 1000,label="_adduct_score")
+rMSIfragment:::plot_figure3(pks_neg,res.neg.5ppm,744.558,3,label="_5ppm_top3")
+
+rMSIfragment:::plot_figure1(res.neg.5ppm.td2,metrics[1:3],label="_NEG_D1_N")
+rMSIfragment:::plot_figure2(pks_neg,res.neg.20ppm,gt_neg,"S",steps = 1000,label="_adduct_score")
+rMSIfragment:::plot_figure3(pks_neg,res.neg.20ppm,744.558,3,label="_5ppm_top3")
+```
+### Check separation between parental vs fragment
 ```{r}
+#Compute parental
+tmp<-rMSIfragment:::manual_validation(res.neg.20ppm,gt_neg)
+t<-tmp$table
+a<-subset(d$adducts,mode=="neg")$name
+t$parental<-t$adduct%in%a
+subset(t,!match&HPLC_adduct!="_")
+
+#Quantify score for HPLC
+tmp$res$match_HPLC_adduct
+i<-tmp$res$match_HPLC_adduct!=""
+pval<-mean(sapply(1:100,function(j)wilcox.test(sample(tmp$res$S[!i],sum(i)), tmp$res$S[i], alternative = "two.sided")$p.value))
 
 ```
+### PR curve
+```{r}
+#roc<-td_roc(tmp$res$S,i,mz_i)
+#auc<-mean(sapply(1:500,function(j)PRROC::pr.curve(scores.class1 = sample(tmp$res$S[!i],sum(i)),scores.class0=tmp$res$S[i],curve=T)$auc.integral))
+pr<-PRROC::pr.curve(scores.class1 = tmp$res$S[i],scores.class0=tmp$res$S[!i],curve=T)
+  df<-data.frame(x=pr$curve[,1],y=pr$curve[,2])
+
+  pb<-ggplot(df,aes(x,y))+geom_line(size=2)+
+    xlab("Recall")+ylab("Precision")+
+    theme_bw()+theme(legend.justification = c(1, 0), legend.position = c(1, 0),legend.background=element_rect(size=0.2,colour=1),panel.border = element_rect(colour = "black", fill=NA), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), plot.title = element_text(hjust = 0),text=element_text(size=20)) +
+    ggtitle("B")#+
+    #scale_color_discrete(name = "Score", breaks = names,labels = paste(names," (",round(pr$auc.integral,2)," AUC)",sep = ""))
+pb
+pr$auc.integral
+
+
+rcFinal$curve<-
+rc<-PRROC::roc.curve(scores.class0 = tmp$res$S[i],scores.class1=sample(tmp$res$S[!i],sum(i)),curve=T)
+  df<-data.frame(x=rc$curve[,1],y=rc$curve[,2])
+
+  pc<-ggplot(df,aes(x,y))+geom_line(size=2)+
+    xlab("False Positive Rate")+ylab("Sensitivity")+
+    theme_bw()+theme(legend.justification = c(1, 0), legend.position = c(1, 0),legend.background=element_rect(size=0.2,colour=1),panel.border = element_rect(colour = "black", fill=NA), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), plot.title = element_text(hjust = 0),text=element_text(size=20)) +
+    ggtitle("c")#+
+    #scale_color_discrete(name = "Score", breaks = names,labels = paste(names," (",round(pr$auc.integral,2)," AUC)",sep = ""))
+pc
+rc$auc
+```
+```{r}
+###
+rc2<-lapply(1:1000,function(j)PRROC::roc.curve(scores.class0 = tmp$res$S[i],scores.class1=sample(tmp$res$S[!i],sum(i)),curve=T))
+df<-data.frame(x=unlist(lapply(rc2,function(x)x$curve[,1])),y=unlist(lapply(rc2,function(x)x$curve[,2])),id=rep(1:length(rc2),times=sapply(rc2,function(x)length(x$curve[,1]))))
+ggplot(df, aes(x = x, y = y)) +
+  geom_line(aes(group = id), alpha = 0.5) +
+  geom_smooth(size = 0.8, se = F, span = 0.2)
+```
+
+
+```{r, fig.width=15}
+#rMSIfragment:::plot_figure1(res.pos.5ppm.td1,metrics[1:3],label="_NEG_D1_N")
+rMSIfragment:::plot_figure2(pks_pos,res.pos.5ppm,gt_pos,"S",steps = 1000,label="_adduct_score")
+#rMSIfragment:::plot_figure3(pks_pos,res.pos.5ppm,744.558,3,label="_5ppm_top3")
+
+#rMSIfragment:::plot_figure1(res.pos.5ppm.td2,metrics[1:3],label="_NEG_D1_N")
+rMSIfragment:::plot_figure2(pks_pos,res.pos.20ppm,gt_pos,"S",steps = 1000,label="_adduct_score")
+#rMSIfragment:::plot_figure3(pks_pos,res.pos.20ppm,744.558,3,label="_5ppm_top3")
+```
+### Figure 1. Manual Validation (Negative mode 20 ppm)
+```{r, fig.width=15}
+rMSIfragment:::plot_figure1(res1,metrics,label="_NEG_D1_N")
+rMSIfragment:::plot_figure2(pks_neg,res,gt_neg,"adduct_score",label="_adduct_score")
+rMSIfragment:::plot_figure3(pks_neg,res,744.558,3,label="_5ppm_top3")
+```
+
 ### Figure 2. Target Decoy Validation
 ```{r}
 
 ```
-### Figure 3. METASPACE Validation
+### Figure 3. METASPACE Validation (They use 3ppm tolerance)
 ```{r}
-
+files=list.files(path = "E:/in-source fragmentation/METASPACE/",pattern = "*.zip", full.names = TRUE,recursive = T)
+pks_MS<-lapply(files,rMSIproc::LoadPeakMatrix)
+csvfiles=gsub(".zip",".csv",files)
+ann_MS<-lapply(csvfiles,function(x)read.csv(x,skip=2))
+df<-data.frame(name=basename(files))
+df$mode<-sapply(strsplit(basename(files),"_"),function(x)tolower(x[1]))
+df$matrix<-sapply(strsplit(basename(files),"_"),function(x)tolower(x[2]))
+df$specimen<-sapply(strsplit(basename(files),"_"),function(x)tolower(x[3]))
+df$tissue<-sapply(strsplit(basename(files),"_"),function(x)tolower(x[4]))
+df$analyzer<-sapply(strsplit(basename(files),"_"),function(x)tolower(x[4]))
+df$mz.mean<-sapply(pks_MS,function(x)mean(x$mass))
+df$mz.max<-sapply(pks_MS,function(x)max(x$mass))
+df$mz.min<-sapply(pks_MS,function(x)min(x$mass))
 ```
+### Annotate with rMSIfragment
+```{r}
+res_MS<-lapply(seq_along(pks_MS),function(i)rMSIfragment::annotate(pks_MS[[i]],new,3,df$mode[i]))
+```
+
+```{r}
+rbind(sapply(res_MS,nrow),sapply(ann_MS,nrow),sapply(pks_MS,function(x)min(x$mass)),sapply(pks_MS,function(x)max(x$mass)))
+```
+### Compare the results
+```{r}
+i<-10
+
+
+
+comp<-lapply(seq_along(pks_MS),function(i)compareToMetaspace(res_MS[[i]],ann_MS[[i]],pks_MS[[i]]))
+```
+
+```{r}
+df$covered<-sapply(comp,function(x)x$covered)
+df$matching<-sapply(comp,function(x)x$matching)
+df$overlappedWithFragments<-sapply(comp,function(x)x$overlappedWithFragments)
+df$compoundsWithFragments<-sapply(comp,function(x)x$compoundsWithFragments)
+ggplot(df,aes(x=matching,y=covered,label=1:16))+geom_point()+geom_text(hjust=0,vjust=0)
+```
+
+
 ### Figure 4. Example application
 ```{r}
+pks_MUN<-rMSIproc::LoadPeakMatrix("E:/in-source fragmentation/MUNSTER/Munster_Au_Res_140k_10um.zip")
+```
+```{r}
+rMSIproc::plotPeakImage(pks_MUN,column=1000)
+```
+### Updating the databases
+```{r}
+new<-rMSIfragment:::load_lipidMAPS("E:/in-source fragmentation/DATA/db/LMSD.sdf")
+old<-rMSIfragment:::load_lipidMAPS("E:/in-source fragmentation/DATA/db/LMSDold.sdf")
+tmp<-rMSIfragment:::load_decoy_non_animal(NA,"E:/in-source fragmentation/DATA/chebi/")
+
+plot(density(tmp$exactmass))
+lines(density(db_t$exactmass))
+tmp2<-rMSIfragment:::adjust_db_densities(db_t,tmp)
+lines(density(tmp2$exactmass))
+
+db_d<-tmp2
+
+save(list=c("db_t","db_d"),file="E:/in-source fragmentation/DATA/target_decoy_db_new.RData")
+```
+
+### Move to figure generation new Use either 4, 6 or 8
+```{r}
+lapply(pks_MS,function(x)rMSIproc::plotPeakImage(x,column=900))
+```
+### Using 4
+```{r}
+## Look for interesting annotations
+them<-ann_MS[[4]]
+us<-res_MS[[4]]
+a1<-ours
+a2<-subset(a1,fragmentation=="")
+a3<-subset(a1,fragmentation!="")
+b<-metaspace
+b$mz_i<-sapply(b$mz,function(x) which.min(abs(pks$mass-x)))
+matching<-(paste(us$formula,us$adduct)%in%paste(them$formula,them$adduct))&(us$fragmentation=="")
+
+matched_us<-us[matching,]
+matched_us<-matched_us[order(matched_us$S,decreasing = T),]
+
+
+## Interesting experimental masses
+
+772.5864
+744.5553
+887.5661
+788.5452
 
 ```
+
+
+```{r,fig.width=10,fig.height=10}
+rMSIfragment:::plot_figure3(pks_MS[[4]],res_MS[[4]],772.5864,3,label="_5ppm_top3")
+rMSIfragment:::plot_figure3(pks_MS[[4]],res_MS[[4]],744.5553,3,label="_5ppm_top3")
+rMSIfragment:::plot_figure3(pks_MS[[4]],res_MS[[4]],887.5661,3,label="_5ppm_top3")
+rMSIfragment:::plot_figure3(pks_MS[[4]],res_MS[[4]],788.5452,3,label="_5ppm_top3")
+```
+```{r}
+them[which.min(abs(them$mz-887.57)),]
+them[which.min(abs(them$mz-836.53)),]
+them[which.min(abs(them$mz-749.51)),]
+```
+
+
+### Reprocess all datasets
+```{r}
+files_imzML=list.files(path = "E:/in-source fragmentation/METASPACE/new3/",pattern = "*.imzML", full.names = TRUE,recursive = T)
+files_zip=gsub("*.imzML",".zip",files_imzML)
+
+for(i in seq_along(files_imzML)){
+  tmp<-rMSIworkflows:::loadBinnedCentroidData(files_imzML[i],3)
+  rMSIproc::StorePeakMatrix(files_zip[i],tmp)
+}
+```
+
+### Focus on dataset 3
+```{r}
+
+tmp<-rMSIworkflows:::loadBinnedCentroidData("E:/in-source fragmentation/METASPACE/imzML/NEG_DAN_MOUSE_MUSCLE_ORBITRAP.imzML",3)
+
+```
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+i=3
+tol=50
+tmp2<-rMSIfragment::annotate(tmp,new,3,df$mode[i])
+
+ann_MS[[3]]$formula%in%new$formula
+
+exp_mz<-pks_MS[[i]]$mass
+a<-d$adducts$mass[d$adducts$name=="M-H"]
+db_mz<-new$exactmass
+target<-db_mz+a
+
+#Generate matches
+min<-target-target*tol*10^-6
+max<-target+target*tol*10^-6
+
+match<-sapply(exp_mz,function(x)x<max&x>min)
+
+
+apply(match,2,any)
+```
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+tmp4<-rMSIfragment::annotate(tmp,new,10,df$mode[i])
+```
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+tmp5<-rMSIfragment::annotate(tmp,db_t,3,df$mode[3])
+tmp6<-rMSIfragment::annotate(tmp,db_t,10,df$mode[3])
+```
+
+```{r}
+comp<-list()
+comp[[1]]<-rMSIfragment:::compareToMetaspace(tmp2,ann_MS[[3]],tmp)
+comp[[2]]<-rMSIfragment:::compareToMetaspace(tmp4,ann_MS[[3]],tmp)
+comp[[3]]<-rMSIfragment:::compareToMetaspace(tmp2,subset(ann_MS[[3]],fdr<0.2),tmp)
+comp[[4]]<-rMSIfragment:::compareToMetaspace(tmp4,subset(ann_MS[[3]],fdr<0.2),tmp)
+
+comp[[5]]<-rMSIfragment:::compareToMetaspace(tmp5,ann_MS[[3]],tmp)
+comp[[6]]<-rMSIfragment:::compareToMetaspace(tmp6,ann_MS[[3]],tmp)
+comp[[7]]<-rMSIfragment:::compareToMetaspace(tmp5,subset(ann_MS[[3]],fdr<0.2),tmp)
+comp[[8]]<-rMSIfragment:::compareToMetaspace(tmp6,subset(ann_MS[[3]],fdr<0.2),tmp)
+
+rbind(sapply(comp,function(x)x$matching),sapply(comp,function(x)x$overlappedWithFragments),sapply(comp,function(x)x$compoundsWithFragments))
+
+```
+
+
 
 ```{r}
 pks<-rMSIproc::LoadPeakMatrix("/home/gbaquer/msidata/1. In-source Fragmentation/1.5. Validation Datasets/2. Nevus articulo fragmentación/pks_neg.zip")

@@ -1,4 +1,11 @@
 #API - main functions exported
+env <- new.env(parent = emptyenv())
+
+updateEnv <-function(x){
+  for (i in 1:length(x)){
+    env[[names(x)[i]]]<-x[[i]]
+  }
+}
 
 #' Load fragmentation and adduct data
 #'
@@ -150,15 +157,15 @@ loadData<-function(){
 #' Missing examples
 #'
 #' @export
-search_db<-function(mz,db,tol=5,m="pos",rand_af=F,db_ref=db){
+search_db<-function(mz,db,tol=5,m="pos",rand_af=F,db_ref=db,d){
   #Generate a and f
   db_mz<-db$exactmass
-  a<-subset(adducts,mode==m)$mass
-  names(a)<-subset(adducts,mode==m)$name
+  a<-subset(env$adducts,mode==m)$mass
+  names(a)<-subset(env$adducts,mode==m)$name
   if(m=="neg")
-    frag<-fragmentation_neg
+    frag<-env$fragmentation_neg
   else
-    frag<-fragmentation_pos
+    frag<-env$fragmentation_pos
   f<-unlist(lapply(unique(unlist(frag)),parse_fragmentation))
   f<-f[!(f==0)]
   f<-f[unique(names(f))]
@@ -185,8 +192,8 @@ search_db<-function(mz,db,tol=5,m="pos",rand_af=F,db_ref=db){
   results<-do.call(rbind,lapply(seq_along(matches),function(i,x=matches[[i]])if(nrow(x)==0) NULL else data.frame(db[i,c("lipid","c","delta","exactmass","formula","id","abbreviation")],mz_i=x[,1],adduct_i=x[,2],fragment_i=x[,3],lipid_ref=db_ref[i,"lipid"])))
   results$experimental_mz<-mz[results$mz_i]
   results$adduct<-names(a)[results$adduct_i]
-  results$adduct_mode<-subset(adducts,mode==m)$mode[results$adduct_i]
-  results$adduct_score<-sapply(1:nrow(results),function(i)subset(adducts,mode==m)[results$adduct_i[i],as.character(results$lipid_ref[i])])
+  results$adduct_mode<-subset(env$adducts,mode==m)$mode[results$adduct_i]
+  results$adduct_score<-sapply(1:nrow(results),function(i)subset(env$adducts,mode==m)[results$adduct_i[i],as.character(results$lipid_ref[i])])
   results$adduct_score<-sapply(results$adduct_score,function(x)if(is.null(x))0 else x)
   results$fragmentation<-names(f)[results$fragment_i]
   results$fragmentation_possible<-sapply(1:nrow(results),function(i)frag_possible(results$adduct_mode[i],as.character(results$lipid_ref[i]),results$fragmentation[i]))
@@ -212,7 +219,7 @@ search_db<-function(mz,db,tol=5,m="pos",rand_af=F,db_ref=db){
 #' Missing examples
 #'
 #' @export
-ranking<-function(res,pks,m){
+ranking<-function(res,pks,m,d){
   res<-unique(res)
   #res<-res[!is.na(res$lipid),]
   res$lipid_string<-paste(res$lipid," ",res$c,":",res$delta, " ",round(res$exactmass,2),sep="")
@@ -226,8 +233,8 @@ ranking<-function(res,pks,m){
   res$fragment_percentage<-rep(0,nrow(res))
   for(i in unique(res$lipid_id)){
     p_adduct<-unique(subset(res,lipid_id==i&fragmentation=="")$adduct)
-    possible_adducts<-rownames(subset(adducts,mode==m))[which(subset(adducts,mode==m)[,res$lipid_ref[match(i,res$lipid_id)]]!=0)]
-    res$parental_percentage[res$lipid_id==i]<-sum(possible_adducts%in%p_adduct)/length(possible_adducts)
+    #possible_adducts<-rownames(subset(env$adducts,mode==m))[which(subset(env$adducts,mode==m)[,res$lipid_ref[match(i,res$lipid_id)]]!=0)]
+    #res$parental_percentage[res$lipid_id==i]<-sum(possible_adducts%in%p_adduct)/length(possible_adducts)
 
     f_frag<-unique(subset(res,lipid_id==i&fragmentation!="")$fragmentation)
     possible_fragmentations<-possible_frags(m,res$lipid_ref[match(i,res$lipid_id)])
@@ -319,7 +326,6 @@ annotate<-function(pks,db,tol=5,m="pos",rand_af=F,db_ref=db){
 #'
 #' @export
 manual_validation<-function(res,table){
-
   res$table_mz<-sapply(res$experimental_mz,function(x)with(table,mz[which.min(abs(mz-x))]))
   a<-with(table,paste(lipid,c,delta,mz))
   b<-with(res,paste(lipid,c,delta,table_mz))
