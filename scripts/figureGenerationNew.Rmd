@@ -66,8 +66,8 @@ res.pos.5ppm<-rMSIfragment::annotate(pks_pos,db_t,5,"pos")
 #rMSIfragment:::plot_figure3(pks_neg,res.neg.5ppm,744.558,3,label="_5ppm_top3")
 
 #rMSIfragment:::plot_figure1(res.neg.5ppm.td2,metrics[1:3],label="_NEG_D1_N")
-rMSIfragment:::plot_figure2(pks_neg,res.neg.20ppm,gt_neg,"S",steps = 20,label="_adduct_score",topN = T)
-#rMSIfragment:::plot_figure3(pks_neg,res.neg.20ppm,744.558,3,label="_5ppm_top3")
+rMSIfragment:::plot_figure2(res.neg.20ppm,c("S"),label="_adduct_score")
+librar#rMSIfragment:::plot_figure3(pks_neg,res.neg.20ppm,744.558,3,label="_5ppm_top3")
 ```
 ### Check separation between parental vs fragment
 ```{r}
@@ -126,7 +126,7 @@ ggplot(df, aes(x = x, y = y)) +
 
 ```{r, fig.width=15}
 #rMSIfragment:::plot_figure1(res.pos.5ppm.td1,metrics[1:3],label="_NEG_D1_N")
-rMSIfragment:::plot_figure2(pks_pos,res.pos.5ppm,gt_pos,"S",steps = 20,label="_adduct_score",topN = T)
+rMSIfragment:::plot_figure2(pks_pos,res.pos.5ppm,gt_pos,label="_adduct_score")
 #rMSIfragment:::plot_figure3(pks_pos,res.pos.5ppm,744.558,3,label="_5ppm_top3")
 
 #rMSIfragment:::plot_figure1(res.pos.5ppm.td2,metrics[1:3],label="_NEG_D1_N")
@@ -499,5 +499,14 @@ plot_roc(res,c("lipid_occurences","correlation","lipid_occurences*correlation"))
 
 
 man_val<-manual_validation(subset(res1,db=="T"),load_gt())
+```
+
+#Loook at data
+```{r}
+tmp<-x.neg.20ppm$A1$df[(x.neg.20ppm$A1$df$var=="HPLC validated matches (%)"),]
+
+max(tmp$y)
+tmp$threshold[which.min(abs(tmp$y-0.5))]
+tmp$y[which.min(abs(tmp$threshold-5))]
 ```
 
