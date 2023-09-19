@@ -1,4 +1,4 @@
-ll # rMSIfragment
+# rMSIfragment
 rMSIfragment is an open-source R package for the automated annotation of in-source fragments for improved lipid annotation in MALDI-MSI.
 
 More information can be found in the accompanying preprint: 
